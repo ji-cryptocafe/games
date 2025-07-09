@@ -1,4 +1,3 @@
-/* src/App.css */
 :root {
   --primary-bg: #f0f4f8;
   --secondary-bg: #ffffff;
@@ -38,8 +37,7 @@ main {
 }
 
 /* --- Login & Menu --- */
-.login-container,
-.main-menu-container {
+.login-container, .main-menu-container {
   max-width: 600px;
   margin: 2rem auto;
   padding: 2rem;
@@ -65,8 +63,7 @@ main {
   border-radius: 4px;
 }
 
-.btn,
-.btn-secondary {
+.btn, .btn-secondary {
   padding: 10px 20px;
   font-size: 1rem;
   font-weight: bold;
@@ -95,6 +92,7 @@ main {
   background-color: #ccc;
   cursor: not-allowed;
 }
+
 
 .game-selection {
   margin-top: 2rem;
@@ -142,7 +140,7 @@ main {
   padding: 2rem;
   background-color: var(--secondary-bg);
   border-radius: 8px;
-  min-height: 550px; /* Increased to fit legend */
+  min-height: 550px;
   cursor: pointer;
   position: relative;
   flex-direction: column;
@@ -184,6 +182,18 @@ main {
 .history-list li.incorrect {
   color: var(--incorrect-color);
 }
+
+.quit-button {
+  width: 100%;
+  margin-top: 1rem;
+  background-color: var(--incorrect-color);
+  border: 1px solid var(--incorrect-color);
+}
+.quit-button:hover {
+  background-color: #c82333;
+  border-color: #bd2130;
+}
+
 
 /* --- Card Styles --- */
 .card-piles-wrapper {
@@ -235,11 +245,12 @@ main {
 
 .card-back {
   background-color: #555;
-  background-image: linear-gradient(45deg, #777 25%, transparent 25%),
+  background-image:
+    linear-gradient(45deg, #777 25%, transparent 25%), 
     linear-gradient(-45deg, #777 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #777 75%),
     linear-gradient(-45deg, transparent 75%, #777 75%);
-  background-size: 20px 20px;
+  background-size:20px 20px;
   background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
 }
 
@@ -337,8 +348,7 @@ main {
 }
 
 /* --- Result Form & Feedback --- */
-.result-form,
-.result-feedback {
+.result-form, .result-feedback {
   width: 100%;
   max-width: 500px;
   margin: 0 auto;

@@ -1,4 +1,3 @@
-// src/components/HeadCountingGame.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Card from './Card.jsx';
 import { createDeck, shuffleDeck, calculateDeckSum } from '../utils/deck.js';
@@ -11,7 +10,7 @@ const legendCards = [
   { suit: '♠', rank: 'A', value: 14 },
 ];
 
-const HeadCountingGame = ({ user, onGameEnd }) => {
+const HeadCountingGame = ({ user, onGameEnd, onQuit }) => {
   const [deck, setDeck] = useState([]);
   const [currentCardIndex, setCurrentCardIndex] = useState(-1);
   const [gameState, setGameState] = useState('loading'); // loading, playing, finished
@@ -19,42 +18,32 @@ const HeadCountingGame = ({ user, onGameEnd }) => {
   const [userSum, setUserSum] = useState('');
   const [result, setResult] = useState(null);
   const [tempSum, setTempSum] = useState('');
-  const [checkpoints, setCheckpoints] = useState([]); // Stores checkpoint data
+  const [checkpoints, setCheckpoints] = useState([]);
 
   const timerRef = useRef(null);
   const correctSumRef = useRef(0);
 
-  // Initialize game on component mount
+  // Initialize game with a random partial deck
   useEffect(() => {
-    // --- CHANGED: Logic to create a random partial deck ---
-
-    // 1. Create and shuffle a full deck as before.
     const fullShuffledDeck = shuffleDeck(createDeck());
-
-    // 2. Determine a random number of cards to "cut" from the top.
-    //    Using a range of 5 to 15 creates good variability.
-    const cardsToCut = Math.floor(Math.random() * 5 + 1);
-
-    // 3. Create the partial deck that the player will actually use.
-    //    .slice() creates a new array from the cut point to the end.
+    // Cut a random number of cards (5-15) from the top for unpredictability
+    const cardsToCut = Math.floor(Math.random() * (15 - 5 + 1)) + 5;
     const partialDeck = fullShuffledDeck.slice(cardsToCut);
-
-    // 4. Set the correct sum and the deck state using ONLY the partial deck.
+    
     correctSumRef.current = calculateDeckSum(partialDeck);
     setDeck(partialDeck);
-
-    // --- END OF CHANGES ---
-
+    
     startTimer();
     setGameState('playing');
-
+    
+    // Cleanup timer on unmount
     return () => clearInterval(timerRef.current);
   }, []);
 
   // --- Card Movement Logic ---
   const drawNextCard = useCallback(() => {
     if (currentCardIndex < deck.length - 1) {
-      setCurrentCardIndex((prevIndex) => prevIndex + 1);
+      setCurrentCardIndex(prevIndex => prevIndex + 1);
     } else {
       setGameState('finished');
       stopTimer();
@@ -63,13 +52,14 @@ const HeadCountingGame = ({ user, onGameEnd }) => {
 
   const goBackOneCard = useCallback(() => {
     if (currentCardIndex >= 0) {
-      setCurrentCardIndex((prevIndex) => prevIndex - 1);
+      setCurrentCardIndex(prevIndex => prevIndex - 1);
     }
   }, [currentCardIndex]);
 
   // --- Checkpoint Logic ---
   const handleSetCheckpoint = useCallback(() => {
-    if (!tempSum) return;
+    // Check for a non-empty, valid number string.
+    if (!tempSum || isNaN(parseInt(tempSum, 10))) return;
 
     const partialDeck = deck.slice(0, currentCardIndex + 1);
     const correctPartialSum = calculateDeckSum(partialDeck);
@@ -81,19 +71,21 @@ const HeadCountingGame = ({ user, onGameEnd }) => {
       timeAtCheckpoint: time,
     };
 
-    setCheckpoints((prev) => [...prev, newCheckpoint]);
-    setTempSum(''); // Clear the input after saving
+    setCheckpoints(prev => [...prev, newCheckpoint]);
   }, [tempSum, deck, currentCardIndex, time]);
 
   // --- Input Handling ---
   useEffect(() => {
+    // Helper function to bundle saving a checkpoint and drawing the next card.
+    const saveAndDraw = () => {
+      handleSetCheckpoint();
+      drawNextCard();
+    };
+
     const handleKeyboardInput = (e) => {
       if (e.code === 'Space') {
         e.preventDefault();
-        if (tempSum) {
-          handleSetCheckpoint();
-        }
-        drawNextCard();
+        saveAndDraw();
       }
       if (e.code === 'Backspace') {
         e.preventDefault();
@@ -102,20 +94,17 @@ const HeadCountingGame = ({ user, onGameEnd }) => {
     };
 
     const handleMouseInput = (e) => {
+      // Ignore clicks originating from the scratchpad area
       if (e.target.closest('.scratchpad-area')) {
         return;
       }
-      if (e.button === 0) {
-        // Left click
-        if (tempSum) {
-          handleSetCheckpoint();
-        }
-        drawNextCard();
+      if (e.button === 0) { // Left click
+        saveAndDraw();
       }
     };
-
-    const handleContextMenu = (e) => {
-      // Right click
+    
+    const handleContextMenu = (e) => { // Right click
+      // Ignore right-clicks on the scratchpad area
       if (e.target.closest('.scratchpad-area')) {
         e.preventDefault();
         return;
@@ -140,10 +129,18 @@ const HeadCountingGame = ({ user, onGameEnd }) => {
         }
       };
     }
-  }, [gameState, tempSum, drawNextCard, goBackOneCard, handleSetCheckpoint]);
+  }, [gameState, drawNextCard, goBackOneCard, handleSetCheckpoint]);
+
+  // --- Scratchpad-specific handlers ---
+  const handleScratchpadChange = (e) => {
+    const value = e.target.value;
+    // Sanitize the input to only allow whole numbers
+    const wholeNumberValue = value.replace(/[^0-9]/g, '');
+    setTempSum(wholeNumberValue);
+  };
 
   const handleScratchpadKeyDown = (e) => {
-    e.stopPropagation();
+    e.stopPropagation(); // Stop Backspace from triggering goBackOneCard
     if (e.key === 'Enter') {
       e.preventDefault();
       handleSetCheckpoint();
@@ -154,23 +151,21 @@ const HeadCountingGame = ({ user, onGameEnd }) => {
     if (checkpoints.length > 0) {
       const lastCheckpoint = checkpoints[checkpoints.length - 1];
       setCurrentCardIndex(lastCheckpoint.index);
+      // Restore the scratchpad value from the checkpoint
+      setTempSum(String(lastCheckpoint.userValue));
     }
   };
 
-  // --- Helper Functions ---
+  // --- Other Helper Functions ---
   const startTimer = () => {
-    timerRef.current = setInterval(() => setTime((t) => t + 1), 1000);
+    timerRef.current = setInterval(() => setTime(t => t + 1), 1000);
   };
   const stopTimer = () => clearInterval(timerRef.current);
 
   const handleSumSubmit = (e) => {
     e.preventDefault();
     const isCorrect = parseInt(userSum) === correctSumRef.current;
-    const gameResult = {
-      date: new Date().toISOString(),
-      time,
-      correct: isCorrect,
-    };
+    const gameResult = { date: new Date().toISOString(), time, correct: isCorrect };
     setResult({ correct: isCorrect, correctSum: correctSumRef.current });
     onGameEnd(gameResult);
   };
@@ -178,20 +173,14 @@ const HeadCountingGame = ({ user, onGameEnd }) => {
   const formatTime = (totalSeconds) => {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${seconds
-      .toString()
-      .padStart(2, '0')}`;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
   const currentCard = deck[currentCardIndex];
 
   return (
     <div className="app-layout">
-      {gameState === 'loading' && (
-        <div className="game-container">
-          <h2>Loading Deck...</h2>
-        </div>
-      )}
+      {gameState === 'loading' && <div className="game-container"><h2>Loading Deck...</h2></div>}
 
       {gameState !== 'loading' && (
         <div className="game-container" id="game-area">
@@ -208,46 +197,35 @@ const HeadCountingGame = ({ user, onGameEnd }) => {
             <>
               <div className="card-piles-wrapper">
                 <div className="card-piles">
-                  <div className="pile-label">
-                    Deck (
-                    {deck.length > 0 ? deck.length - 1 - currentCardIndex : 0}{' '}
-                    left)
-                  </div>
+                  <div className="pile-label">Deck ({deck.length > 0 ? deck.length - 1 - currentCardIndex : 0} left)</div>
                   <div className="card-stack">
-                    {deck.length - 1 - currentCardIndex > 0 ? (
-                      <Card faceUp={false} />
-                    ) : (
-                      <div className="card-placeholder"></div>
-                    )}
+                    {deck.length - 1 - currentCardIndex > 0 ? <Card faceUp={false} /> : <div className="card-placeholder"></div>}
                   </div>
                 </div>
                 <div className="card-piles">
-                  <div className="pile-label">
-                    Used Pile ({currentCardIndex + 1})
-                  </div>
+                  <div className="pile-label">Used Pile ({currentCardIndex + 1})</div>
                   <div className="card-stack">
-                    {currentCard ? (
-                      <Card card={currentCard} />
-                    ) : (
-                      <div className="card-placeholder">
-                        Click to draw first card
-                      </div>
-                    )}
+                    {currentCard ? <Card card={currentCard} /> : <div className="card-placeholder">Click to draw first card</div>}
                   </div>
                 </div>
               </div>
 
               <div className="scratchpad-area">
                 <div className="scratchpad-container">
-                  <label htmlFor="temp-sum">Scratchpad (Enter to save)</label>
+                  <label htmlFor="temp-sum">Scratchpad</label>
                   <input
                     id="temp-sum"
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     className="temp-sum-input"
                     value={tempSum}
-                    onChange={(e) => setTempSum(e.target.value)}
-                    placeholder="Type partial sum"
+                    onChange={handleScratchpadChange}
                     onKeyDown={handleScratchpadKeyDown}
+                    onWheel={(e) => e.target.blur()}
+                    onContextMenu={(e) => e.preventDefault()}
+                    onFocus={(e) => e.target.select()}
+                    placeholder="Type partial sum"
                   />
                 </div>
                 <button
@@ -267,9 +245,7 @@ const HeadCountingGame = ({ user, onGameEnd }) => {
               <h2>Deck Finished!</h2>
               <p>Time Taken: {formatTime(time)}</p>
               <form onSubmit={handleSumSubmit}>
-                <label htmlFor="total-sum">
-                  What was the total sum of all cards?
-                </label>
+                <label htmlFor="total-sum">What was the total sum of all cards?</label>
                 <input
                   id="total-sum"
                   type="number"
@@ -279,9 +255,7 @@ const HeadCountingGame = ({ user, onGameEnd }) => {
                   className="name-input"
                   autoFocus
                 />
-                <button type="submit" className="btn">
-                  Check Answer
-                </button>
+                <button type="submit" className="btn">Check Answer</button>
               </form>
             </div>
           )}
@@ -302,17 +276,11 @@ const HeadCountingGame = ({ user, onGameEnd }) => {
                     {checkpoints.map((cp, i) => (
                       <li
                         key={i}
-                        className={
-                          cp.userValue === cp.correctPartialSum
-                            ? 'correct-checkpoint'
-                            : 'incorrect-checkpoint'
-                        }
+                        className={cp.userValue === cp.correctPartialSum ? 'correct-checkpoint' : 'incorrect-checkpoint'}
                       >
                         {cp.userValue === cp.correctPartialSum ? '✅' : '❌'}
-                        At card #{cp.index + 1} (Time:{' '}
-                        {formatTime(cp.timeAtCheckpoint)}), you entered{' '}
-                        <strong>{cp.userValue}</strong>. (Correct was:{' '}
-                        {cp.correctPartialSum})
+                        At card #{cp.index + 1} (Time: {formatTime(cp.timeAtCheckpoint)}), you entered <strong>{cp.userValue}</strong>.
+                        (Correct was: {cp.correctPartialSum})
                       </li>
                     ))}
                   </ul>
@@ -322,7 +290,7 @@ const HeadCountingGame = ({ user, onGameEnd }) => {
           )}
         </div>
       )}
-
+      
       <div className="sidebar">
         <h3>Game Info</h3>
         <div className="timer">
@@ -335,16 +303,16 @@ const HeadCountingGame = ({ user, onGameEnd }) => {
             <li>No history yet.</li>
           ) : (
             user.history.slice(0, 5).map((item, index) => (
-              <li
-                key={index}
-                className={item.correct ? 'correct' : 'incorrect'}
-              >
-                {new Date(item.date).toLocaleDateString()} -{' '}
-                {formatTime(item.time)} - {item.correct ? '✅' : '❌'}
+              <li key={index} className={item.correct ? 'correct' : 'incorrect'}>
+                {new Date(item.date).toLocaleDateString()} - {formatTime(item.time)} - {item.correct ? '✅' : '❌'}
               </li>
             ))
           )}
         </ul>
+        <hr />
+        <button onClick={onQuit} className="btn quit-button">
+          Quit to Menu
+        </button>
       </div>
     </div>
   );
